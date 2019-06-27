@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -38,7 +40,40 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 		log.Print("NODE NAMES:")
 
 	        for _, node := range sched_extender_args.Nodes.Items {
-			log.Print("\t", node.Name)
+			var addr_to_dial = ""
+			for _, node_addr := range node.Status.Addresses {
+				if((node_addr.Type == v1.NodeInternalIP) || (node_addr.Type == v1.NodeInternalDNS)) {
+					addr_to_dial = node_addr.Address
+					break
+				}
+			}
+
+			log.Print("\t", node.Name, ": ", node.Status.Addresses)
+			log.Print("\t\tAddr to dial: ", addr_to_dial)
+
+			resp, err := http.Get(fmt.Sprintf("http://%s:%s/getpfs", addr_to_dial, "54005"))
+			if(err != nil) {
+				canNotSchedule[node.Name] = "SCHEDULER EXTENDER SAYS: May not scheduler pod on this node."
+				continue
+			}
+
+			data, err := ioutil.ReadAll(resp.Body)
+			if(err != nil) {
+				canNotSchedule[node.Name] = "SCHEDULER EXTENDER SAYS: May not scheduler pod on this node."
+				continue
+			}
+
+			var pfs []*PF
+			err = json.Unmarshal(data, &pfs)
+			if(err != nil) {
+				canNotSchedule[node.Name] = "SCHEDULER EXTENDER SAYS: May not scheduler pod on this node."
+				continue
+			}
+
+			log.Print("\t\tPFs on node:")
+			for _, pf := range pfs {
+				log.Print("\t\t\t", pf)
+			}
 
 			if(node.Name == "ty") {
 	                        canSchedule = append(canSchedule, node)
