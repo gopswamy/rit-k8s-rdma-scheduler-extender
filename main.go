@@ -106,25 +106,38 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 		node_eligibility_channel := make(chan node_eligibility)
 
 		pod_annotations := sched_extender_args.Pod.ObjectMeta.Annotations
-
-		var interfaces_needed []knapsack_pod_placement.RdmaInterfaceRequest
-		err = json.Unmarshal([]byte(pod_annotations["rdma_interfaces_required"]), &interfaces_needed)
-		if(err != nil) {
-		        for _, node := range sched_extender_args.Nodes.Items {
-				canNotSchedule[node.Name] = "RDMA Scheduler Extension: 'rdma_interfaces_required' field in pod YAML file is malformatted."
+		//if the pod does not require any RDMA interfaces
+		if(pod_annotations["rdma_interfaces_required"] == "") {
+			for _, node := range sched_extender_args.Nodes.Items {
+				canSchedule = append(canSchedule, node)
 			}
-		} else {
-		        for i, node := range sched_extender_args.Nodes.Items {
-				go queryNode(i, node.Status.Addresses, interfaces_needed, node_eligibility_channel)
-			}
+		}
+		else {
 
-			var cur_elig node_eligibility
-		        for _, _ = range sched_extender_args.Nodes.Items {
-				cur_elig = <-node_eligibility_channel
-				if(cur_elig.enough_resources) {
-					canSchedule = append(canSchedule, sched_extender_args.Nodes.Items[cur_elig.index])
-				} else {
-					canNotSchedule[sched_extender_args.Nodes.Items[cur_elig.index].Name] = cur_elig.ineligibility_reason
+			var interfaces_needed []knapsack_pod_placement.RdmaInterfaceRequest
+			err = json.Unmarshal([]byte(pod_annotations["rdma_interfaces_required"]), &interfaces_needed)
+			if(err != nil) {
+			        for _, node := range sched_extender_args.Nodes.Items {
+					canNotSchedule[node.Name] = "RDMA Scheduler Extension: 'rdma_interfaces_required' field in pod YAML file is malformatted."
+				}
+			} else {
+			        for i, node := range sched_extender_args.Nodes.Items {
+					go queryNode(
+						i,
+						node.Status.Addresses,
+						interfaces_needed,
+						node_eligibility_channel
+					)
+				}
+
+				var cur_elig node_eligibility
+			        for _, _ = range sched_extender_args.Nodes.Items {
+					cur_elig = <-node_eligibility_channel
+					if(cur_elig.enough_resources) {
+						canSchedule = append(canSchedule, sched_extender_args.Nodes.Items[cur_elig.index])
+					} else {
+						canNotSchedule[sched_extender_args.Nodes.Items[cur_elig.index].Name] = cur_elig.ineligibility_reason
+					}
 				}
 			}
 		}
