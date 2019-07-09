@@ -59,12 +59,11 @@ func queryNode(node_index int,
 			}
 
 			//determine if the node's avilable resources will satisfy the pod's needs
-			placement, placement_success := knapsack_pod_placement.PlacePod(needed_resources, pfs, false)
+			_, placement_success := knapsack_pod_placement.PlacePod(needed_resources, pfs, false)
 
 			//if the pod's needs couldn't be met
 			if(!placement_success) {
 				//report that back through the channel
-				log.Println("No Possible Placement: ", node_addr)
 				node_result.enough_resources = false
 				node_result.ineligibility_reason = "RDMA Scheduler Extension: Node did not have enough free RDMA resources."
 				output_channel <- node_result
@@ -72,7 +71,6 @@ func queryNode(node_index int,
 			//otherwise, the pod's needs could be met
 			} else {
 				//report that back through the channel
-				log.Println("Possible Placement: ", node_addr, ": ", placement)
 				node_result.enough_resources = true
 				node_result.ineligibility_reason = ""
 				output_channel <- node_result
@@ -94,6 +92,8 @@ func queryNode(node_index int,
 //	HTTP requests to the RDMA scheduler extender.
 func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Request, _ httprouter.Params) {
 	log.Print("\n")
+	log.Print("\n")
+
 	//reject empty requests
 	if(request.Body == nil) {
 		log.Println("Got empty http request.")
@@ -169,7 +169,7 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 				}
 			//otherwise, if the RDMA interface requirements were correctly formatted
 			} else {
-				log.Println("Pod's RDMA resource requirements: ", interfaces_needed)
+				log.Printf("Pod's RDMA resource requirements: %+v", interfaces_needed)
 
 				//concurrently send a request to the DaemonSet
 				//	on each potential node to get information
@@ -196,12 +196,11 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 				log.Println("Results from querying each node:")
 				for _, _ = range sched_extender_args.Nodes.Items {
 					cur_elig = <-node_eligibility_channel
-					log.Print("\t", sched_extender_args.Nodes.Items[cur_elig.index].Name, ": ")
 					if(cur_elig.enough_resources) {
-						log.Println("Eligible")
+						log.Println("\t", sched_extender_args.Nodes.Items[cur_elig.index].Name, ": Eligible")
 						canSchedule = append(canSchedule, sched_extender_args.Nodes.Items[cur_elig.index])
 					} else {
-						log.Println("Not Eligible")
+						log.Println("\t", sched_extender_args.Nodes.Items[cur_elig.index].Name, ": Not Eligible")
 						canNotSchedule[sched_extender_args.Nodes.Items[cur_elig.index].Name] = cur_elig.ineligibility_reason
 					}
 				}
