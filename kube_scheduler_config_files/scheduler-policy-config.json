@@ -1,0 +1,14 @@
+{
+  "kind": "Policy",
+  "apiVersion": "v1",
+  "extenders": [
+    {
+      "urlPrefix": "http://127.0.0.1:8888/scheduler",
+      "filterVerb": "rdma_scheduling",
+      "bindVerb": "",
+      "enableHttps": false,
+      "nodeCacheCapable": false,
+      "ignorable": false
+    }
+  ]
+}
