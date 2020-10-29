@@ -1,0 +1,3 @@
+[submodule "github.com/gopswamy/rit-k8s-rdma-common"]
+	path = github.com/gopswamy/rit-k8s-rdma-common
+	url = https://github.com/gopswamy/rit-k8s-rdma-common.git
