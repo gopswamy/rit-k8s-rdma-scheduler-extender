@@ -196,27 +196,33 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 				//	into the "can schedule on" or "cannot schedule on" lists
 				//	for the pod.
 				var cur_elig node_eligibility
+				var elig [2]node_eligibility
+				//log.Println(len(node_eligibility_channel))
 				min_cap := math.MaxUint32
 				for range sched_extender_args.Nodes.Items {
 					cur_elig = <-node_eligibility_channel
+					elig[cur_elig.index] = cur_elig
 					if(cur_elig.capacity < min_cap){
 						min_cap = cur_elig.capacity
 					}
 				}
-				log.Println(min_cap)
+				i:=0
 				log.Println("Results from querying each node:")
 				for range sched_extender_args.Nodes.Items {
 					//cur_elig = <-node_eligibility_channel
-					if cur_elig.enough_resources && cur_elig.capacity == min_cap {
-						log.Println("yes")
-						log.Println("\t", sched_extender_args.Nodes.Items[cur_elig.index].Name, ": Eligible")
-						canSchedule = append(canSchedule, sched_extender_args.Nodes.Items[cur_elig.index])
+					//log.Println(cur_elig.capacity)
+					if elig[i].enough_resources && elig[i].capacity == min_cap {
+						log.Println("\t", sched_extender_args.Nodes.Items[elig[i].index].Name, "Capacity", elig[i].capacity)
+						log.Println("\t", sched_extender_args.Nodes.Items[elig[i].index].Name, ": Eligible")
+						canSchedule = append(canSchedule, sched_extender_args.Nodes.Items[elig[i].index])
 					} else {
-						log.Println("\t", sched_extender_args.Nodes.Items[cur_elig.index].Name, ": Not Eligible")
-						canNotSchedule[sched_extender_args.Nodes.Items[cur_elig.index].Name] = cur_elig.ineligibility_reason
+						log.Println("\t", sched_extender_args.Nodes.Items[elig[i].index].Name, "Capacity", elig[i].capacity)
+						log.Println("\t", sched_extender_args.Nodes.Items[elig[i].index].Name, ": Not Eligible")
+						canNotSchedule[sched_extender_args.Nodes.Items[elig[i].index].Name] = elig[i].ineligibility_reason
 					}
+					log.Println("")
+					i++
 				}
-				log.Println(min_cap)
 			}
 		}
 
