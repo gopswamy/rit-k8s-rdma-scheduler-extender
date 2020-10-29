@@ -4,13 +4,13 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 	"os"
 
 	"github.com/julienschmidt/httprouter"
-
-	"github.com/rit-k8s-rdma/rit-k8s-rdma-common/knapsack_pod_placement"
-	"github.com/rit-k8s-rdma/rit-k8s-rdma-common/rdma_hardware_info"
+	"github.com/gopswamy/rit-k8s-rdma-common/knapsack_pod_placement"
+	"github.com/gopswamy/rit-k8s-rdma-common/rdma_hardware_info"
 
 	"k8s.io/api/core/v1"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
@@ -26,6 +26,7 @@ const (
 //	node. this type is passed through the channel from 'queryNode' to
 //	'HandleSchedulerFilterRequest'
 type node_eligibility struct {
+	capacity int
 	index int
 	enough_resources bool
 	ineligibility_reason string
@@ -59,13 +60,14 @@ func queryNode(node_index int,
 			}
 
 			//determine if the node's avilable resources will satisfy the pod's needs
-			_, placement_success := knapsack_pod_placement.PlacePod(needed_resources, pfs, false)
+			capacity,_, placement_success := knapsack_pod_placement.PlacePod(needed_resources, pfs, false)
 
 			//if the pod's needs couldn't be met
 			if(!placement_success) {
 				//report that back through the channel
 				node_result.enough_resources = false
 				node_result.ineligibility_reason = "RDMA Scheduler Extension: Node did not have enough free RDMA resources."
+				node_result.capacity = capacity
 				output_channel <- node_result
 				return
 			//otherwise, the pod's needs could be met
@@ -73,6 +75,7 @@ func queryNode(node_index int,
 				//report that back through the channel
 				node_result.enough_resources = true
 				node_result.ineligibility_reason = ""
+				node_result.capacity = capacity
 				output_channel <- node_result
 				return
 			}
@@ -180,7 +183,7 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 				//	results from this will be passed back over the
 				//	'node_eligibility_channel'.
 				for i, node := range sched_extender_args.Nodes.Items {
-					go queryNode(
+				        go queryNode(
 						i,
 						node.Status.Addresses,
 						interfaces_needed,
@@ -193,10 +196,19 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 				//	into the "can schedule on" or "cannot schedule on" lists
 				//	for the pod.
 				var cur_elig node_eligibility
-				log.Println("Results from querying each node:")
-				for _, _ = range sched_extender_args.Nodes.Items {
+				min_cap := math.MaxUint32
+				for range sched_extender_args.Nodes.Items {
 					cur_elig = <-node_eligibility_channel
-					if(cur_elig.enough_resources) {
+					if(cur_elig.capacity < min_cap){
+						min_cap = cur_elig.capacity
+					}
+				}
+				log.Println(min_cap)
+				log.Println("Results from querying each node:")
+				for range sched_extender_args.Nodes.Items {
+					//cur_elig = <-node_eligibility_channel
+					if cur_elig.enough_resources && cur_elig.capacity == min_cap {
+						log.Println("yes")
 						log.Println("\t", sched_extender_args.Nodes.Items[cur_elig.index].Name, ": Eligible")
 						canSchedule = append(canSchedule, sched_extender_args.Nodes.Items[cur_elig.index])
 					} else {
@@ -204,6 +216,7 @@ func HandleSchedulerFilterRequest(response http.ResponseWriter, request *http.Re
 						canNotSchedule[sched_extender_args.Nodes.Items[cur_elig.index].Name] = cur_elig.ineligibility_reason
 					}
 				}
+				log.Println(min_cap)
 			}
 		}
 
